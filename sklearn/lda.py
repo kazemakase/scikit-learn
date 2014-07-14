@@ -1,16 +1,22 @@
 """
 The :mod:`sklearn.lda` module implements Linear Discriminant Analysis (LDA).
 """
-from __future__ import print_function
+
 # Authors: Matthieu Perrot
 #          Mathieu Blondel
+#          Clemens Brunner
+#          Martin Billinger
 
+# License: BSD 3-Clause
+
+from __future__ import print_function
 import warnings
 
 import numpy as np
 from scipy import linalg
 
 from .base import BaseEstimator, ClassifierMixin, TransformerMixin
+from .covariance import ledoit_wolf, empirical_covariance
 from .utils.extmath import logsumexp
 from .utils import check_array, check_X_y
 
@@ -82,16 +88,10 @@ class LDA(BaseEstimator, ClassifierMixin, TransformerMixin):
 
     """
 
-    def __init__(self, n_components=None, priors=None):
+    def __init__(self, shrinkage=None, n_components=None, priors=None):
+        self.shrinkage = shrinkage
         self.n_components = n_components
         self.priors = np.asarray(priors) if priors is not None else None
-
-        if self.priors is not None:
-            if (self.priors < 0).any():
-                raise ValueError('priors must be non-negative')
-            if self.priors.sum() != 1:
-                print('warning: the priors do not sum to 1. Renormalizing')
-                self.priors = self.priors / self.priors.sum()
 
     def fit(self, X, y, store_covariance=False, tol=1.0e-4):
         """
@@ -116,78 +116,125 @@ class LDA(BaseEstimator, ClassifierMixin, TransformerMixin):
         n_classes = len(self.classes_)
         if n_classes < 2:
             raise ValueError('y has less than 2 classes')
-        if self.priors is None:
-            self.priors_ = np.bincount(y) / float(n_samples)
-        else:
+
+        # TODO: support equal priors (with priors=='equal')
+        if self.priors is not None:
+            if (self.priors < 0).any():
+                raise ValueError('priors must be non-negative')
+            if self.priors.sum() != 1:
+                warnings.warn('normalizing priors because they do not sum to 1')
+                self.priors = self.priors / self.priors.sum()
             self.priors_ = self.priors
+        else:
+            self.priors_ = np.bincount(y) / float(n_samples)
 
-        # Group means n_classes*n_features matrix
-        means = []
-        Xc = []
-        cov = None
-        if store_covariance:
-            cov = np.zeros((n_features, n_features))
-        for ind in range(n_classes):
-            Xg = X[y == ind, :]
-            meang = Xg.mean(0)
-            means.append(meang)
-            # centered group data
-            Xgc = Xg - meang
-            Xc.append(Xgc)
+        if self.shrinkage is not None:
+            if self.shrinkage == 'auto':
+                # get covariance matrix (and discard shrinkage parameter)
+                self._cov_estimator = lambda *args, **kwargs: ledoit_wolf(*args, **kwargs)[0]
+            else:
+                warnings.warn('unknown shrinkage method, using no shrinkage instead')
+                self._cov_estimator = empirical_covariance
+        else:
+            self._cov_estimator = empirical_covariance
+
+        if self.shrinkage is None:
+            # Group means n_classes*n_features matrix
+            means = []
+            Xc = []
+            cov = None
             if store_covariance:
-                cov += np.dot(Xgc.T, Xgc)
-        if store_covariance:
-            cov /= (n_samples - n_classes)
-            self.covariance_ = cov
+                cov = np.zeros((n_features, n_features))
+            for ind in range(n_classes):
+                Xg = X[y == ind, :]
+                meang = Xg.mean(0)
+                means.append(meang)
+                # centered group data
+                Xgc = Xg - meang
+                Xc.append(Xgc)
+                if store_covariance:
+                    cov += np.dot(Xgc.T, Xgc)
+            if store_covariance:
+                cov /= (n_samples - n_classes)
+                self.covariance_ = cov
 
-        self.means_ = np.asarray(means)
-        Xc = np.concatenate(Xc, axis=0)
+            self.means_ = np.asarray(means)
+            Xc = np.concatenate(Xc, axis=0)
 
-        # ----------------------------
-        # 1) within (univariate) scaling by with classes std-dev
-        std = Xc.std(axis=0)
-        # avoid division by zero in normalization
-        std[std == 0] = 1.
-        fac = 1. / (n_samples - n_classes)
-        # ----------------------------
-        # 2) Within variance scaling
-        X = np.sqrt(fac) * (Xc / std)
-        # SVD of centered (within)scaled data
-        U, S, V = linalg.svd(X, full_matrices=False)
+            # ----------------------------
+            # 1) within (univariate) scaling by with classes std-dev
+            std = Xc.std(axis=0)
+            # avoid division by zero in normalization
+            std[std == 0] = 1.
+            fac = 1. / (n_samples - n_classes)
+            # ----------------------------
+            # 2) Within variance scaling
+            X = np.sqrt(fac) * (Xc / std)
+            # SVD of centered (within)scaled data
+            U, S, V = linalg.svd(X, full_matrices=False)
 
-        rank = np.sum(S > tol)
-        if rank < n_features:
-            warnings.warn("Variables are collinear")
-        # Scaling of within covariance is: V' 1/S
-        scalings = (V[:rank] / std).T / S[:rank]
+            rank = np.sum(S > tol)
+            if rank < n_features:
+                warnings.warn("Variables are collinear")
+            # Scaling of within covariance is: V' 1/S
+            scalings = (V[:rank] / std).T / S[:rank]
 
-        ## ----------------------------
-        ## 3) Between variance scaling
-        # Overall mean
-        xbar = np.dot(self.priors_, self.means_)
-        # Scale weighted centers
-        X = np.dot(((np.sqrt((n_samples * self.priors_) * fac)) *
-                    (means - xbar).T).T, scalings)
-        # Centers are living in a space with n_classes-1 dim (maximum)
-        # Use svd to find projection in the space spanned by the
-        # (n_classes) centers
-        _, S, V = linalg.svd(X, full_matrices=0)
+            ## ----------------------------
+            ## 3) Between variance scaling
+            # Overall mean
+            xbar = np.dot(self.priors_, self.means_)
+            # Scale weighted centers
+            X = np.dot(((np.sqrt((n_samples * self.priors_) * fac)) *
+                        (means - xbar).T).T, scalings)
+            # Centers are living in a space with n_classes-1 dim (maximum)
+            # Use svd to find projection in the space spanned by the
+            # (n_classes) centers
+            _, S, V = linalg.svd(X, full_matrices=0)
 
-        rank = np.sum(S > tol * S[0])
-        # compose the scalings
-        self.scalings_ = np.dot(scalings, V.T[:, :rank])
-        self.xbar_ = xbar
-        # weight vectors / centroids
-        self.coef_ = np.dot(self.means_ - self.xbar_, self.scalings_)
-        self.intercept_ = (-0.5 * np.sum(self.coef_ ** 2, axis=1) +
-                           np.log(self.priors_))
-        return self
+            rank = np.sum(S > tol * S[0])
+            # compose the scalings
+            self.scalings_ = np.dot(scalings, V.T[:, :rank])
+            self.xbar_ = xbar
+            # weight vectors / centroids
+            self.coef_ = np.dot(self.means_ - self.xbar_, self.scalings_)
+            self.intercept_ = (-0.5 * np.sum(self.coef_ ** 2, axis=1) +
+                               np.log(self.priors_))
+            return self
+        else:  # shrinkage
+            means = []
+            covs = []
+            Xc = []
+            for ind in range(n_classes):
+                Xg = X[y == ind, :]
+                meang = Xg.mean(0)
+                means.append(meang)
+                Xgc = Xg - meang
+                Xc.append(Xgc)
+                covg = self._cov_estimator(Xgc)
+                covg = np.atleast_2d(covg)
+                covs.append(covg)
+
+            self.covariance_ = np.mean(covs, 0)
+            self.means_ = np.asarray(means)
+            self.xbar_ = np.dot(self.priors_, self.means_)
+
+            # TODO: weight covariances with priors?
+            Sw = np.mean(covs, 0)  # Within-class scatter
+            means = self.means_ - self.xbar_
+
+            self.coef_ = np.linalg.lstsq(Sw, means.T, rcond=1e-11)[0].T
+            self.intercept_ = (-0.5 * np.diag(np.dot(means, self.coef_.T))
+                               + np.log(self.priors_))
+            return self
 
     def _decision_function(self, X):
         X = check_array(X)
-        # center and scale data
-        X = np.dot(X - self.xbar_, self.scalings_)
-        return np.dot(X, self.coef_.T) + self.intercept_
+        if self.shrinkage is None:
+            # center and scale data
+            X = np.dot(X - self.xbar_, self.scalings_)
+            return np.dot(X, self.coef_.T) + self.intercept_
+        else:
+            return np.dot(X - self.xbar_, self.coef_.T) + self.intercept_
 
     def decision_function(self, X):
         """
@@ -225,7 +272,8 @@ class LDA(BaseEstimator, ClassifierMixin, TransformerMixin):
         """
         X = check_array(X)
         # center and scale data
-        X = np.dot(X - self.xbar_, self.scalings_)
+        if self.shrinkage is None:  # FIXME: transformation doesn't work for shrinkage estimators yet
+            X = np.dot(X - self.xbar_, self.scalings_)
         n_comp = X.shape[1] if self.n_components is None else self.n_components
         return np.dot(X, self.coef_[:n_comp].T)
 
