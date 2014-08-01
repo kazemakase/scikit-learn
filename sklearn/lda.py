@@ -46,6 +46,10 @@ class LDA(BaseEstimator, ClassifierMixin, TransformerMixin):
 
     shrinkage : string, optional
         Shrinkage method for regularization, default None
+        Possible values are 'ledoitwolf', which determines the optimal
+        regularization parameter automatically, and 'none', which does not use
+        shrinkage, but uses empirical covariance matrices (in contrast to
+        setting the parameter to None, which uses an SVD-based algorithm).
 
     Attributes
     ----------
@@ -132,16 +136,6 @@ class LDA(BaseEstimator, ClassifierMixin, TransformerMixin):
         else:
             self.priors_ = np.bincount(y) / float(n_samples)
 
-        if self.shrinkage is not None:
-            if self.shrinkage == 'auto':
-                # get covariance matrix (and discard shrinkage parameter)
-                self._cov_estimator = lambda *args, **kwargs: ledoit_wolf(*args, **kwargs)[0]
-            else:
-                warnings.warn('unknown shrinkage method, using no shrinkage instead')
-                self._cov_estimator = empirical_covariance
-        else:
-            self._cov_estimator = empirical_covariance
-
         if self.shrinkage is None:
             # Group means n_classes*n_features matrix
             means = []
@@ -204,7 +198,15 @@ class LDA(BaseEstimator, ClassifierMixin, TransformerMixin):
             self.intercept_ = (-0.5 * np.sum(self.coef_ ** 2, axis=1) +
                                np.log(self.priors_))
             return self
+
         else:  # shrinkage
+            if self.shrinkage == 'ledoitwolf':
+                # get covariance matrix (and discard shrinkage parameter)
+                self._cov_estimator = lambda *args, **kwargs: ledoit_wolf(*args, **kwargs)[0]
+            else:
+                warnings.warn('unknown shrinkage method, using no shrinkage instead')
+                self._cov_estimator = empirical_covariance
+
             means = []
             covs = []
             Xc = []
@@ -276,7 +278,7 @@ class LDA(BaseEstimator, ClassifierMixin, TransformerMixin):
         """
         X = check_array(X)
         # center and scale data
-        if self.shrinkage is None:  # FIXME: transformation doesn't work for shrinkage estimators yet
+        if self.shrinkage is None:
             X = np.dot(X - self.xbar_, self.scalings_)
         else:
             X = X - self.xbar_
