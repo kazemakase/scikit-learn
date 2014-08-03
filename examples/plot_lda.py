@@ -16,8 +16,8 @@ from sklearn.lda import LDA
 
 
 n_train = 10     # samples per class for training
-n_test = 100    # samples per class for training
-n_averages = 50
+n_test = 100     # samples per class for testing
+n_averages = 50  # how often to repeat classification
 
 
 def generate_data(n_samples, n_features):
@@ -31,10 +31,10 @@ def generate_data(n_samples, n_features):
     return X, y
 
 acc_lda, acc_slda, acc_nlda = [], [], []
-m_range = range(2, 50)
+m_range = range(0, 50)
 for m in m_range:
     sys.stdout.write('\r{:.0%}'.format(m/max(m_range)))
-    tmp_lda, tmp_slda, tmp_nlda = 0, 0, 0
+    score_lda, score_slda, score_nlda = 0, 0, 0
     for i in range(n_averages):
         X, y = generate_data(n_train, m)
 
@@ -43,19 +43,19 @@ for m in m_range:
         nlda = LDA(shrinkage='empirical').fit(X, y)
 
         X, y = generate_data(n_test, m)
-        tmp_lda += lda.score(X, y) / n_averages
-        tmp_slda += slda.score(X, y) / n_averages
-        tmp_nlda += nlda.score(X, y) / n_averages
+        score_lda += lda.score(X, y) / n_averages
+        score_slda += slda.score(X, y) / n_averages
+        score_nlda += nlda.score(X, y) / n_averages
 
-    acc_lda.append(tmp_lda)
-    acc_slda.append(tmp_slda)
-    acc_nlda.append(tmp_nlda)
+    acc_lda.append(score_lda)
+    acc_slda.append(score_slda)
+    acc_nlda.append(score_nlda)
 
 m_range = (1 + np.array(m_range)) / (2 * n_train)
 
-plt.plot(m_range, acc_slda, linewidth=2, label='ShrinkageLDA()', color='r')
-plt.plot(m_range, acc_nlda, linewidth=2, label='ShrinkageLDA(shrinkage=None)', color='g')
-plt.plot(m_range, acc_lda, linewidth=2, label='LDA()', color='b')
+plt.plot(m_range, acc_slda, linewidth=2, label="LDA(shrinkage='ledoitwolf')", color='r')
+plt.plot(m_range, acc_nlda, linewidth=2, label="LDA(shrinkage='empirical')", color='g')
+plt.plot(m_range, acc_lda, linewidth=2, label="LDA()", color='b')
 
 plt.xlabel('n_features / n_samples')
 plt.ylabel('Classification accuracy')
