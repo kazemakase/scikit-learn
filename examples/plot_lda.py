@@ -39,8 +39,8 @@ for m in m_range:
         X, y = generate_data(n_train, m)
 
         lda = LDA().fit(X, y)
-        slda = LDA(shrinkage='ledoitwolf').fit(X, y)
-        nlda = LDA(shrinkage='empirical').fit(X, y)
+        slda = LDA(use_covariance='ledoitwolf').fit(X, y)
+        nlda = LDA(use_covariance='empirical').fit(X, y)
 
         X, y = generate_data(n_test, m)
         score_lda += lda.score(X, y) / n_averages
@@ -53,9 +53,12 @@ for m in m_range:
 
 m_range = (1 + np.array(m_range)) / (2 * n_train)
 
-plt.plot(m_range, acc_slda, linewidth=2, label="LDA(shrinkage='ledoitwolf')", color='r')
-plt.plot(m_range, acc_nlda, linewidth=2, label="LDA(shrinkage='empirical')", color='g')
-plt.plot(m_range, acc_lda, linewidth=2, label="LDA()", color='b')
+plt.plot(m_range, acc_slda, linewidth=2,
+         label="LDA(use_covariance='ledoitwolf')", color='r')
+plt.plot(m_range, acc_nlda, linewidth=2,
+         label="LDA(use_covariance='empirical')", color='g')
+plt.plot(m_range, acc_lda, linewidth=2,
+         label="LDA()", color='b')
 
 plt.xlabel('n_features / n_samples')
 plt.ylabel('Classification accuracy')
