@@ -45,12 +45,10 @@ class LDA(BaseEstimator, ClassifierMixin, TransformerMixin):
     priors : array, optional, shape = [n_classes]
         Priors on classes
 
-    shrinkage : string, optional
-        Shrinkage method for regularization, default None
-        Possible values are 'ledoitwolf', which determines the optimal
-        regularization parameter automatically, and 'none', which does not use
-        shrinkage, but uses empirical covariance matrices (in contrast to
-        setting the parameter to None, which uses an SVD-based algorithm).
+    use_covariance : string, optional
+        Compute LDA based on covariance estimation, default None (uses SVD).
+        Possible values are 'ledoitwolf', which employs analytic shrinkage based
+        on Ledoit-Wolf, and 'empirical' (no shrinkage).
 
     Attributes
     ----------
@@ -84,7 +82,7 @@ class LDA(BaseEstimator, ClassifierMixin, TransformerMixin):
     >>> y = np.array([1, 1, 1, 2, 2, 2])
     >>> clf = LDA()
     >>> clf.fit(X, y)
-    LDA(n_components=None, priors=None)
+    LDA(n_components=None, priors=None, use_covariance=None)
     >>> print(clf.predict([[-0.8, -1]]))
     [1]
 
