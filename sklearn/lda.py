@@ -19,6 +19,7 @@ from .base import BaseEstimator, ClassifierMixin, TransformerMixin
 from .covariance import ledoit_wolf, empirical_covariance
 from .utils.extmath import logsumexp
 from .utils import check_array, check_X_y
+from .preprocessing import StandardScaler
 
 __all__ = ['LDA']
 
@@ -93,10 +94,10 @@ class LDA(BaseEstimator, ClassifierMixin, TransformerMixin):
 
     """
 
-    def __init__(self, n_components=None, priors=None, shrinkage=None):
+    def __init__(self, n_components=None, priors=None, use_covariance=None):
         self.n_components = n_components
         self.priors = np.asarray(priors) if priors is not None else None
-        self.shrinkage = shrinkage
+        self.use_covariance = use_covariance
 
     def fit(self, X, y, store_covariance=False, tol=1.0e-4):
         """
@@ -136,7 +137,7 @@ class LDA(BaseEstimator, ClassifierMixin, TransformerMixin):
         else:
             self.priors_ = np.bincount(y) / float(n_samples)
 
-        if self.shrinkage is None:
+        if self.use_covariance is None:
             # Group means n_classes*n_features matrix
             means = []
             Xc = []
@@ -199,14 +200,7 @@ class LDA(BaseEstimator, ClassifierMixin, TransformerMixin):
                                np.log(self.priors_))
             return self
 
-        else:  # shrinkage
-            if self.shrinkage == 'ledoitwolf':
-                # get covariance matrix (and discard shrinkage parameter)
-                self._cov_estimator = lambda *args, **kwargs: ledoit_wolf(*args, **kwargs)[0]
-            else:
-                warnings.warn('unknown shrinkage method, using no shrinkage instead')
-                self._cov_estimator = empirical_covariance
-
+        else:  # use covariance matrix
             means = []
             covs = []
             Xc = []
@@ -214,9 +208,7 @@ class LDA(BaseEstimator, ClassifierMixin, TransformerMixin):
                 Xg = X[y == ind, :]
                 meang = Xg.mean(0)
                 means.append(meang)
-                Xgc = Xg - meang
-                Xc.append(Xgc)
-                covg = self._cov_estimator(Xgc)
+                covg = _cov(Xg, self.use_covariance)
                 covg = np.atleast_2d(covg)
                 covs.append(covg)
 
@@ -235,7 +227,7 @@ class LDA(BaseEstimator, ClassifierMixin, TransformerMixin):
 
     def _decision_function(self, X):
         X = check_array(X)
-        if self.shrinkage is None:
+        if self.use_covariance is None:
             # center and scale data
             X = np.dot(X - self.xbar_, self.scalings_)
             return np.dot(X, self.coef_.T) + self.intercept_
@@ -278,7 +270,7 @@ class LDA(BaseEstimator, ClassifierMixin, TransformerMixin):
         """
         X = check_array(X)
         # center and scale data
-        if self.shrinkage is None:
+        if self.use_covariance is None:
             X = np.dot(X - self.xbar_, self.scalings_)
         else:
             X = X - self.xbar_
@@ -340,3 +332,17 @@ class LDA(BaseEstimator, ClassifierMixin, TransformerMixin):
         loglikelihood = (values - values.max(axis=1)[:, np.newaxis])
         normalization = logsumexp(loglikelihood, axis=1)
         return loglikelihood - normalization[:, np.newaxis]
+
+
+def _cov(X, estimator):
+    if estimator == 'ledoitwolf':
+        # standardize features
+        sc = StandardScaler()
+        X = sc.fit_transform(X)
+        std = np.diag(sc.std_)
+        s = std.dot(ledoit_wolf(X)[0]).dot(std)  # rescale covariance matrix
+    elif estimator == 'empirical':
+        s = empirical_covariance(X)
+    else:
+        raise ValueError('unknown covariance estimation method')
+    return s
