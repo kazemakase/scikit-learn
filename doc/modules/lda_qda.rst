@@ -72,8 +72,8 @@ Shrinkage LDA can be used by setting the ``use_covariance`` parameter of the
 optimal shrinkage parameter in an analytic way following the lemma introduced by
 Ledoit and Wolf.
 
-.. |shrinkage| image:: ../auto_examples/images/plot_lda_001.png
-        :target: ../auto_examples/plot_lda.html
+.. |shrinkage| image:: ../auto_examples/classification/images/plot_lda_001.png
+        :target: ../auto_examples/classification/plot_lda.html
         :scale: 75
 
 .. centered:: |shrinkage|
@@ -81,7 +81,7 @@ Ledoit and Wolf.
 
 .. topic:: Examples:
 
-    :ref:`example_plot_lda.py`: Comparison of LDA classifiers with and without shrinkage.
+    :ref:`example_classification_plot_lda.py`: Comparison of LDA classifiers with and without shrinkage.
 
 .. topic:: References:
 
