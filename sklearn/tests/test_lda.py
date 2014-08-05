@@ -8,12 +8,12 @@ from sklearn.utils.testing import assert_true
 from .. import lda
 
 # Data is just 6 separable points in the plane
-X = np.array([[-2, -1], [-1, -1], [-1, -2], [1, 1], [1, 2], [2, 1]])
+X = np.array([[-2, -1], [-1, -1], [-1, -2], [1, 1], [1, 2], [2, 1]], dtype='f')
 y = np.array([1, 1, 1, 2, 2, 2])
 y3 = np.array([1, 1, 2, 2, 3, 3])
 
 # Degenerate data with 1 feature (still should be separable)
-X1 = np.array([[-2, ], [-1, ], [-1, ], [1, ], [1, ], [2, ]])
+X1 = np.array([[-2, ], [-1, ], [-1, ], [1, ], [1, ], [2, ]], dtype='f')
 
 
 covariance_methods = [None, 'empirical', 'ledoitwolf']
