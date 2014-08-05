@@ -8,7 +8,6 @@ Shows how shrinkage improves classification.
 
 from __future__ import division
 
-import sys
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -33,7 +32,6 @@ def generate_data(n_samples, n_features):
 acc_lda, acc_slda, acc_nlda = [], [], []
 m_range = range(0, 50)
 for m in m_range:
-    sys.stdout.write('\r{:.0%}'.format(m/max(m_range)))
     score_lda, score_slda, score_nlda = 0, 0, 0
     for i in range(n_averages):
         X, y = generate_data(n_train, m)
