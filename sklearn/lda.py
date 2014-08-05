@@ -270,9 +270,12 @@ class LDA(BaseEstimator, ClassifierMixin, TransformerMixin):
         # center and scale data
         if self.use_covariance is None:
             X = np.dot(X - self.xbar_, self.scalings_)
+            n_comp = X.shape[1] if self.n_components is None \
+                                else self.n_components
         else:
             X = X - self.xbar_
-        n_comp = X.shape[1] if self.n_components is None else self.n_components
+            n_comp = len(self.classes_) - 1 if self.n_components is None \
+                                            else self.n_components
         return np.dot(X, self.coef_[:n_comp].T)
 
     def predict(self, X):
